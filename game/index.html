@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://cdn.jsdelivr.net; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="description" content="Helios Drift をブラウザでプレイ。インストール不要。">
@@ -18,6 +18,7 @@
 <style>
 [hidden]{display:none!important}
 img{max-width:100%}
+html,body{overscroll-behavior:none}
 
 /* Layout: full-bleed WebGL canvas, HUD pinned to the four corners like a cockpit instrument cluster; amber is the ship's instrument color, ice-blue marks scanner data, violet marks the ancient faction. Single dark look by design. */
 :root{
@@ -298,6 +299,27 @@ body.touch #radar{width:150px;height:108px}
 body.touch #steer,body.touch #deadzone{display:none}
 body.touch .obj ul li:nth-child(n+2){display:none}
 
+/* ---------- Flick scheme (touch) ---------- */
+#flick{position:fixed;inset:0;z-index:4;pointer-events:none}
+.fz{position:absolute;top:calc(env(safe-area-inset-top,0px) + 64px);bottom:0;pointer-events:auto;touch-action:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.fz.l{left:0;width:42%}
+.fz.r{right:0;width:58%}
+#fHint{position:absolute;left:calc(14px + env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);display:grid;gap:5px;padding:12px 14px;background:rgba(7,11,19,.7);border:1px solid var(--line);border-left:2px solid var(--amber);font-size:12px;pointer-events:none;transition:opacity .6s;opacity:0}
+#fHint b{font-family:var(--f-data);font-weight:600;color:var(--amber);display:inline-block;min-width:6.2em}
+#fHint .r{color:var(--ice)}
+#fStick{position:absolute;left:0;top:0;width:140px;height:140px;margin:-70px 0 0 -70px;border-radius:50%;border:1.5px solid rgba(255,178,74,.45);background:rgba(7,11,19,.25);pointer-events:none}
+#fKnob{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(255,178,74,.35);border:1.5px solid var(--amber)}
+#fFeed{position:absolute;left:50%;top:36%;transform:translate(-50%,-50%);font-family:var(--f-display);font-size:15px;letter-spacing:.12em;color:var(--amber);text-shadow:0 0 12px #000;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.fbtns{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);transform:translateX(-50%);display:flex;gap:10px;align-items:flex-end;pointer-events:auto}
+.fbtns .tb{width:58px;height:42px;border-radius:21px;font-size:12px}
+.fbtns .tb.fire{width:70px;height:70px;border-radius:50%;font-size:14px}
+.fbtns .tb.help{width:38px;height:38px;border-radius:50%;color:var(--muted)}
+body.touch.flick .hud-bottom{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 14px)}
+body.flick .flight{width:220px}
+body.flick #radar{width:140px;height:100px}
+body.flick .tgt{display:none!important}
+body.flick #prompt{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 120px)}
+
 @media (max-width:760px){
   .stats{gap:10px;padding:6px 10px}
   .stat span:last-child{font-size:13px}
@@ -420,6 +442,29 @@ body.touch .obj ul li:nth-child(n+2){display:none}
   </div>
 </div>
 
+<div id="flick" hidden>
+  <div class="fz l" id="fzL" aria-label="フリック操作エリア"></div>
+  <div class="fz r" id="fzR" aria-label="操縦エリア"></div>
+  <div id="fHint">
+    <div><b>右をドラッグ</b><span class="r">機首の向き</span></div>
+    <div><b>左 ↑ フリック</b>加速（最大でブースト）</div>
+    <div><b>左 ↓ フリック</b>減速・後退</div>
+    <div><b>左 → フリック</b>ミサイル</div>
+    <div><b>左 ← フリック</b>目標を切り替え</div>
+    <div><b>左を長押し</b>スキャン・調査</div>
+    <div><b>左をダブルタップ</b>巡航ドライブ</div>
+    <div><b>ロックオン中</b>自動で射撃</div>
+  </div>
+  <div id="fStick" hidden><div id="fKnob"></div></div>
+  <div id="fFeed" aria-live="polite"></div>
+  <div class="fbtns">
+    <button class="tb help" id="fHelp" aria-label="操作ガイドを表示">?</button>
+    <button class="tb" data-act="special" id="fSpecial" hidden>EMP</button>
+    <button class="tb" data-act="dock" id="fDock" hidden>ドック</button>
+    <button class="tb fire" data-act="fire">射撃</button>
+  </div>
+</div>
+
 <div class="screen" id="title">
   <div class="title-inner">
     <div class="eyebrow">Helios System · Survey Vessel KESTREL-7</div>
@@ -466,6 +511,14 @@ body.touch .obj ul li:nth-child(n+2){display:none}
       <div><span>スキャン · ドック</span><kbd>X · Y</kbd></div>
       <div><span>巡航 · 目標</span><kbd>LB · RB</kbd></div>
       <div><span>ミサイル · 特殊 · 敵捕捉</span><kbd>十字キー 上 · 左 · 下</kbd></div>
+      <h4>TOUCH · FLICK</h4>
+      <div><span>機首の向き</span><kbd>右側をドラッグ</kbd></div>
+      <div><span>加速 / 減速</span><kbd>左側を ↑ / ↓ フリック</kbd></div>
+      <div><span>ブースト</span><kbd>最大速度で ↑ フリック</kbd></div>
+      <div><span>ミサイル / 目標切替</span><kbd>左側を → / ← フリック</kbd></div>
+      <div><span>スキャン・調査</span><kbd>左側を長押し</kbd></div>
+      <div><span>巡航ドライブ</span><kbd>左側をダブルタップ</kbd></div>
+      <div><span>射撃</span><kbd>ロック中は自動 / 射撃ボタン</kbd></div>
     </div>
     <p style="margin:0;font-size:13px;color:var(--muted);line-height:1.6">敵が近づくと自動で捕捉され、照準の近くに収めるとロックオンします。ロック中は射撃が自動で偏差補正され、弾とミサイルが敵を追尾します。</p>
     <p style="margin:0;font-size:13px;color:var(--muted);line-height:1.6">撃破・スキャン・調査・依頼で経験値が入り、飛行レベルが上がります。レベルが上がるとスキルポイントを獲得し、新しい武装・機体フレーム・塗装が解放されます。ステーションの「パイロット」と「ハンガー」で設定してください。</p>
@@ -481,6 +534,8 @@ body.touch .obj ul li:nth-child(n+2){display:none}
       <div class="seg" id="segQ"><button data-v="high">高</button><button data-v="mid">中</button><button data-v="low">低（ブルームなし）</button></div>
       <span>マウス操作</span>
       <div class="seg" id="segM"><button data-v="pos">画面位置で操縦</button><button data-v="lock">ポインターロック</button></div>
+      <span>タッチ操作</span>
+      <div class="seg" id="segT"><button data-v="flick">フリック</button><button data-v="buttons">ボタン</button></div>
       <span>上下反転</span>
       <div class="seg" id="segI"><button data-v="0">通常</button><button data-v="1">反転（フライトシム式）</button></div>
       <label for="vol">効果音</label>
@@ -593,7 +648,7 @@ const num = (v, min, max, d) => (typeof v === 'number' && Number.isFinite(v)) ? 
 const int = (v, min, max, d) => Math.round(num(v, min, max, d));
 
 const SAVE_KEY = 'helios-drift-save-v2', SET_KEY = 'helios-drift-settings-v1';
-const settings = { quality:'high', mouseMode:'pos', invertY:false, volume:0.7, bgm:0.5 };
+const settings = { quality:'high', mouseMode:'pos', invertY:false, volume:0.7, bgm:0.5, touchMode:'flick' };
 (() => {
   const raw = store.get(SET_KEY); if(!raw || raw.length > 2000) return;
   try {
@@ -603,6 +658,7 @@ const settings = { quality:'high', mouseMode:'pos', invertY:false, volume:0.7, b
     settings.invertY = d.invertY === true;
     settings.volume = num(d.volume, 0, 1, 0.7);
     settings.bgm = num(d.bgm, 0, 1, 0.5);
+    if(['flick','buttons'].includes(d.touchMode)) settings.touchMode = d.touchMode;
   } catch(e){}
 })();
 const saveSettings = () => store.set(SET_KEY, JSON.stringify(settings));
@@ -2122,7 +2178,82 @@ for(const b of document.querySelectorAll('.tb')){
   b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
 }
 addEventListener('touchstart', () => { if(!usingTouch){ usingTouch = true; syncTouchUI(); } }, { passive:true });
-function syncTouchUI(){ document.body.classList.toggle('touch', usingTouch); $('touch').hidden = !(usingTouch && G.state === 'play'); }
+
+/* ---- Flick scheme: right half steers like a floating stick, left half reads flicks / taps / holds ---- */
+const flick = { stick:null, g:null, lastTap:0, boostT:0, hintT:0, feedT:0, hintShown:false };
+const fzL = $('fzL'), fzR = $('fzR'), fStick = $('fStick'), fKnob = $('fKnob'), fFeed = $('fFeed'), fHint = $('fHint');
+function flickFeed(t){ fFeed.textContent = t; fFeed.style.opacity = '1'; flick.feedT = 1.1; try { if(navigator.vibrate) navigator.vibrate(12); } catch(e){} }
+fzR.addEventListener('pointerdown', e => {
+  if(flick.stick) return; e.preventDefault(); sfx.init();
+  flick.stick = { id:e.pointerId, x:e.clientX, y:e.clientY };
+  try { fzR.setPointerCapture(e.pointerId); } catch(err){}
+  fStick.hidden = false; fStick.style.transform = `translate(${e.clientX}px,${e.clientY}px)`; fKnob.style.transform = '';
+});
+fzR.addEventListener('pointermove', e => {
+  const s = flick.stick; if(!s || e.pointerId !== s.id) return;
+  const R = 70; let x = (e.clientX - s.x)/R, y = (e.clientY - s.y)/R; const l = Math.hypot(x, y); if(l > 1){ x /= l; y /= l; }
+  touch.sx = x; touch.sy = -y; fKnob.style.transform = `translate(${(x*R*0.7).toFixed(1)}px,${(y*R*0.7).toFixed(1)}px)`;
+});
+const endFlickStick = e => { const s = flick.stick; if(!s || e.pointerId !== s.id) return; flick.stick = null; touch.sx = touch.sy = 0; fStick.hidden = true; };
+fzR.addEventListener('pointerup', endFlickStick); fzR.addEventListener('pointercancel', endFlickStick);
+fzL.addEventListener('pointerdown', e => {
+  if(flick.g) return; e.preventDefault(); sfx.init();
+  const g = flick.g = { id:e.pointerId, x:e.clientX, y:e.clientY, t:performance.now(), moved:false, hold:false };
+  try { fzL.setPointerCapture(e.pointerId); } catch(err){}
+  g.timer = setTimeout(() => { if(flick.g === g && !g.moved && G.state === 'play'){ g.hold = true; touch.scan = true; scanPressed = true; flickFeed('スキャン'); } }, 320);
+});
+fzL.addEventListener('pointermove', e => { const g = flick.g; if(g && e.pointerId === g.id && Math.hypot(e.clientX - g.x, e.clientY - g.y) > 16) g.moved = true; });
+const endFlickGesture = e => {
+  const g = flick.g; if(!g || e.pointerId !== g.id) return;
+  flick.g = null; clearTimeout(g.timer);
+  if(g.hold){ touch.scan = false; return; }
+  if(e.type === 'pointercancel') return;
+  const dx = e.clientX - g.x, dy = e.clientY - g.y, d = Math.hypot(dx, dy), dt = performance.now() - g.t;
+  if(d > 40 && dt < 450) doFlick(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy < 0 ? 'up' : 'down'));
+  else if(d < 14 && dt < 260){
+    const now = performance.now();
+    if(now - flick.lastTap < 330){ flick.lastTap = 0; toggleCruise(); flickFeed(ship.cruise ? '巡航中' : ship.charge > 0 ? '巡航ドライブ充填' : '巡航解除'); }
+    else flick.lastTap = now;
+  }
+};
+fzL.addEventListener('pointerup', endFlickGesture); fzL.addEventListener('pointercancel', endFlickGesture);
+const THR_STEPS = [-0.3, 0, 0.5, 1];
+function doFlick(dir){
+  if(G.state !== 'play' || ship.dead) return;
+  if(dir === 'up'){
+    if(ship.throttle >= 0.99){ flick.boostT = 1.6; flickFeed('ブースト'); }
+    else { const up = THR_STEPS.find(v => v > ship.throttle + 0.01); ship.throttle = up === undefined ? 1 : up; flickFeed(`スロットル ${Math.round(ship.throttle*100)}%`); }
+  } else if(dir === 'down'){
+    const lower = THR_STEPS.filter(v => v < ship.throttle - 0.01);
+    ship.throttle = lower.length ? lower[lower.length - 1] : -0.3; flick.boostT = 0;
+    flickFeed(ship.throttle < 0 ? '後退' : `スロットル ${Math.round(ship.throttle*100)}%`);
+  } else if(dir === 'right'){
+    const had = ship.missiles >= 1 && !ship.cruise; launchMissiles(); if(had) flickFeed('ミサイル');
+  } else {
+    cycleTarget(1); flickFeed(target ? (target.name || '目標') : '目標なし');
+  }
+}
+$('fHelp').addEventListener('click', () => { flick.hintT = 8; fHint.style.opacity = '1'; });
+function updateFlick(dt){
+  if(flick.boostT > 0) flick.boostT -= dt;
+  if(flick.feedT > 0){ flick.feedT -= dt; if(flick.feedT <= 0) fFeed.style.opacity = '0'; }
+  if(flick.hintT > 0){ flick.hintT -= dt; if(flick.hintT <= 0) fHint.style.opacity = '0'; }
+  const dock = !ship.cruise && ship.pos.distanceTo(station.pos) < 90, emp = G.load.special !== 'none';
+  if($('fDock').hidden === dock) $('fDock').hidden = !dock;
+  if($('fSpecial').hidden === emp) $('fSpecial').hidden = !emp;
+}
+function syncTouchUI(){
+  const flickMode = settings.touchMode === 'flick', play = usingTouch && G.state === 'play';
+  document.body.classList.toggle('touch', usingTouch);
+  document.body.classList.toggle('flick', usingTouch && flickMode);
+  $('touch').hidden = !(play && !flickMode);
+  $('flick').hidden = !(play && flickMode);
+  if(!play){ flick.stick = null; flick.g = null; touch.sx = touch.sy = 0; touch.scan = false; touch.fire = false; fStick.hidden = true; }
+  if(play && flickMode && !flick.hintShown){
+    flick.hintShown = true; flick.hintT = 10; fHint.style.opacity = '1';
+    if(innerHeight > innerWidth) setTimeout(() => toast('横向きにすると遊びやすくなります'), 600);
+  }
+}
 
 function readPad(inp){
   let gp = null;
@@ -2155,6 +2286,10 @@ function gatherInput(){
     const sx = Math.sign(touch.sx)*Math.pow(Math.abs(touch.sx), 1.5), sy = Math.sign(touch.sy)*Math.pow(Math.abs(touch.sy), 1.5);
     inp.yaw -= sx; inp.pitch += sy*inv; inp.roll += touch.roll;
     if(touch.fire) inp.fire = true; if(touch.boost) inp.boost = true; if(touch.scan) inp.scan = true;
+    if(settings.touchMode === 'flick'){
+      if(flick.boostT > 0) inp.boost = true;
+      if(lock.locked && isHostile(target)) inp.fire = true;
+    }
   }
   readPad(inp);
   inp.pitch = clamp(inp.pitch, -1, 1); inp.yaw = clamp(inp.yaw, -1, 1); inp.roll = clamp(inp.roll, -1, 1);
@@ -2280,13 +2415,13 @@ function damage(amount){
 
 const tut = { step:0, turned:0, targeted:false, cruised:false, missile:false };
 const TUT = [
-  { t:'W またはホイールでスロットルを上げて発進します。', done:() => ship.throttle > 0.3 },
-  { t:'マウスを画面中央から動かすと、その方向へ機首が向きます。', done:() => tut.turned > 1.5 },
-  { t:'T で目的地を選びます。惑星マーカーが黄色い枠で囲まれます。', done:() => tut.targeted },
-  { t:'C で巡航ドライブを起動。目標の手前で自動的に解除されます。', done:() => tut.cruised },
-  { t:'惑星に近づいたら R を長押ししてスキャンします。番人が目覚めることがあります。', done:() => G.disc.size > 0 },
+  { t:'W またはホイールでスロットルを上げて発進します。', tt:'画面の左側を上にフリックすると加速します。', done:() => ship.throttle > 0.3 },
+  { t:'マウスを画面中央から動かすと、その方向へ機首が向きます。', tt:'画面の右側をドラッグすると、その方向へ機首が向きます。', done:() => tut.turned > 1.5 },
+  { t:'T で目的地を選びます。惑星マーカーが黄色い枠で囲まれます。', tt:'左側を左にフリックすると目的地が切り替わります。', done:() => tut.targeted },
+  { t:'C で巡航ドライブを起動。目標の手前で自動的に解除されます。', tt:'左側をダブルタップで巡航ドライブ。目標の手前で自動的に解除されます。', done:() => tut.cruised },
+  { t:'惑星に近づいたら R を長押ししてスキャンします。番人が目覚めることがあります。', tt:'惑星に近づいたら左側を長押ししてスキャンします。', done:() => G.disc.size > 0 },
   { t:'ステーションの「依頼」で仕事を受けると、経験値とクレジットが稼げます。', done:() => G.contracts.length > 0 || G.story > 1 },
-  { t:'敵は自動で捕捉されます。照準の近くに収めてロックオンし、Z か右クリックでミサイルを撃ちましょう。', done:() => tut.missile },
+  { t:'敵は自動で捕捉されます。照準の近くに収めてロックオンし、Z か右クリックでミサイルを撃ちましょう。', tt:'ロックオン中は自動で射撃します。左側を右にフリックでミサイル。', done:() => tut.missile },
 ];
 
 function firePrimary(S){
@@ -2985,7 +3120,7 @@ function updateObjectives(){
   if(s) items.push(['main', s.prog ? s.prog() : 'MAIN', s.t + '：' + s.d]);
   for(const c of G.contracts) items.push(['ct', ctProg(c), ctTitle(c)]);
   while(tut.step < TUT.length && TUT[tut.step].done()) tut.step++;
-  let hint = tut.step < TUT.length ? TUT[tut.step].t : '';
+  let hint = tut.step < TUT.length ? ((usingTouch && settings.touchMode === 'flick' && TUT[tut.step].tt) || TUT[tut.step].t) : '';
   if(!hint){
     if(ship.fuel < 20) hint = '燃料が少なくなっています。恒星ヘリオスに近づくと補給できます（温度に注意）。';
     else if(ship.hull < stat().maxHull*0.4) hint = '船体が損傷しています。ステーションで修理しましょう。';
@@ -3276,7 +3411,8 @@ $('bMute').addEventListener('click', toggleMute);
 $('bUndock').addEventListener('click', undock);
 function syncSeg(id, val){ for(const b of $(id).querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === val)); }
 function bindSeg(id, fn){ for(const b of $(id).querySelectorAll('button')) b.addEventListener('click', () => { fn(b.dataset.v); saveSettings(); refreshSettings(); sfx.ui(); }); }
-function refreshSettings(){ syncSeg('segQ', settings.quality); syncSeg('segM', settings.mouseMode); syncSeg('segI', settings.invertY ? '1' : '0'); $('vol').value = settings.volume; $('bgm').value = settings.bgm; }
+bindSeg('segT', v => { settings.touchMode = v; syncTouchUI(); });
+function refreshSettings(){ syncSeg('segT', settings.touchMode); syncSeg('segQ', settings.quality); syncSeg('segM', settings.mouseMode); syncSeg('segI', settings.invertY ? '1' : '0'); $('vol').value = settings.volume; $('bgm').value = settings.bgm; }
 $('bgm').addEventListener('input', e => { settings.bgm = clamp(parseFloat(e.target.value) || 0, 0, 1); music.setVol(); saveSettings(); });
 bindSeg('segQ', v => { settings.quality = v; applyQuality(); });
 bindSeg('segM', v => { settings.mouseMode = v; });
@@ -3319,6 +3455,7 @@ function frame(){
   refreshHostiles();
   if(G.state === 'play'){
     G.playTime += dt;
+    if(usingTouch && settings.touchMode === 'flick') updateFlick(dt);
     updateLock(dt); updatePlayer(dt); updateSpawns(dt); updateSignals(dt); updateEnemies(dt); updateBoss(dt);
     refreshHostiles();
     updateBolts(dt); updateMissiles(dt); updatePickups(dt); updateContracts(dt); checkStory();

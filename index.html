@@ -18,6 +18,7 @@
 <style>
 [hidden]{display:none!important}
 img{max-width:100%}
+html,body{overscroll-behavior:none}
 
 /* Layout: a fixed full-screen WebGL tour of the Helios system sits behind the page; each section is one camera stop, with a translucent instrument-style panel docked left, right or center so the 3D subject stays in view. Same palette and type as the game itself. Single dark look by design. */
 :root{
@@ -356,13 +357,15 @@ footer{position:relative;z-index:1;padding:28px clamp(16px,6vw,96px) calc(env(sa
           </dl>
         </div>
         <div>
-          <h3>Touch</h3>
+          <h3>Touch · Flick</h3>
           <dl>
-            <dt>左スティック</dt><dd>機首の向き</dd>
-            <dt>右スライダー</dt><dd>スロットル</dd>
-            <dt>射撃ボタン</dt><dd>長押しで連射</dd>
-            <dt>ミサイル</dt><dd>タップで発射</dd>
-            <dt>巡航・目標</dt><dd>専用ボタン</dd>
+            <dt>右側をドラッグ</dt><dd>機首の向き</dd>
+            <dt>左 ↑ / ↓</dt><dd>加速・減速（最大でブースト）</dd>
+            <dt>左 →</dt><dd>ミサイル</dd>
+            <dt>左 ←</dt><dd>目標切替</dd>
+            <dt>左を長押し</dt><dd>スキャン・調査</dd>
+            <dt>ダブルタップ</dt><dd>巡航ドライブ</dd>
+            <dt>ロックオン中</dt><dd>自動で射撃</dd>
           </dl>
         </div>
       </div>
